@@ -16,25 +16,27 @@ ui <- navbarPage("Denver Traffic Accidents",
                  tabPanel("Intro",
                           fluidPage(
                               h1("Denver Traffic Accidents"),
-                              h2("by Matthew Pocernich"),
-                              h2("Feb 12, 2025"),
-                              h2("Data Source"),
+                              h3("by Matthew Pocernich"),
+                              h3("Feb 12, 2025"),
+                              p("Sample Dashboard with Visualizations"),
+                              tags$img(src = "i70-crash.jpeg", width = "500px"),
+                              p("  "),
                               tags$a(
-                                  href = "https://opendata-geospatialdenver.hub.arcgis.com/?mode=yoxjflyvfgfj&tag=traffic-accidents", 
-                                  "Denver Open Data", 
+                              href = "https://opendata-geospatialdenver.hub.arcgis.com/?mode=yoxjflyvfgfj&tag=traffic-accidents", 
+                                  "Source:Denver Open Data", 
                                   target = "_blank"  # Opens the link in a new tab
-                              ),
-                              p("Source: Denver Open Data
-                                ")
+                              )
                           )
                  ),
                  
                  # Tab 2: Map with filtering controls
-                 tabPanel("Map",
+                 tabPanel("Location of reported incidents",
+                          p("Display limited to 50 points, for responsiveness.
+                                "),
                           fluidPage(
                               sidebarLayout(
                                   sidebarPanel(
-                                      h3("Filter Markers"),
+                                      #h3("Filter Markers"),
                                       # Add a checkbox to bypass filtering and show all records
                                       checkboxGroupInput("filterCategories", "Select Categories:",
                                                          choices = unique(places$category),
@@ -68,17 +70,20 @@ ui <- navbarPage("Denver Traffic Accidents",
                  # Tab 1: Text Content
                  tabPanel("To-Do List",
                           fluidPage(
-                              h1(""),
-                              h2("by Matthew Pocernich"),
-                              h2("My Bulleted List"),
+                              h2("To Do List "),
+                              p("With such a rich dataset, many features may be added and tasks remain to be completed."),
                               tags$ul(
-                                  tags$li("First bullet point"),
-                                  tags$li("Second bullet point"),
-                                  tags$li("Third bullet point")
+                                  tags$li("Learn more about the data source.  Between 2018 and 2019 there is a significant drop in reported accidents.  Determine if this is caused by a change in the collection process."),
+                                  tags$li("Integrate with API to automatically update data on a daily cadence."),
+                                  tags$li("Provide summary statistics of crashes by vehicle type"),
+                                  tags$li("Integrate external datasource such as weather and vehicle type registrations in the metro area."),
+                                  tags$li("Add heatmap to accident locations.  There are too many points to represent clearly. "),
+                                  tags$li("Remove Incomplete Time Periods in timeseries"),
+                                  tags$li("Create Ratio Plot - Months"),
+                                  tags$li("Add baseline values to figures to help user identify what is unusual.")
                               ),
-                              h2("Feb 12, 2025"),
-                              p("Source: Denver Open Data
-                                ")
+                              
+                              
                           )
                  )
 )
