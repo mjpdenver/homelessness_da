@@ -31,8 +31,6 @@ ui <- navbarPage("Denver Traffic Accidents",
                  
                  # Tab 2: Map with filtering controls
                  tabPanel("Location of reported incidents",
-                          p("Display limited to 50 points, for responsiveness.
-                                "),
                           fluidPage(
                               sidebarLayout(
                                   sidebarPanel(
@@ -42,8 +40,8 @@ ui <- navbarPage("Denver Traffic Accidents",
                                                          choices = unique(places$category),
                                                          selected = unique(places$category)),
                                       dateRangeInput("dateRange", "Select Date Range:",
-                                                     start = min(places$date),
-                                                     end = max(places$date),
+                                                     start = as.Date("2024-01-01"),
+                                                     end = as.Date("2024-04-01"),
                                                      min = min(places$date),
                                                      max = max(places$date))
                                       #dateInput("displayDate", "Select Date:",
@@ -61,6 +59,10 @@ ui <- navbarPage("Denver Traffic Accidents",
                  # Tab 3: Time Series Plot
                  tabPanel("Time Series",
                           fluidPage(
+                              # New input for selecting categories
+                              checkboxGroupInput("tsCategories", "Select Categories:",
+                                                 choices = unique(places$category),
+                                                 selected = unique(places$category)),
                               selectInput("aggPeriod", "Aggregation Period", 
                                           choices = c("Week", "Month"), 
                                           selected = "Week"),
@@ -68,6 +70,18 @@ ui <- navbarPage("Denver Traffic Accidents",
                           )
                  ),
                  # Tab 1: Text Content
+                 # Add this new tabPanel to your navbarPage, for example after the "Time Series" tab
+                 tabPanel("Summary",
+                          fluidPage(
+                              checkboxGroupInput("summaryCategories", "Select Categories:",
+                                                 choices = unique(places$category),
+                                                 selected = unique(places$category)),
+                              selectInput("aggType", "Summarize Counts By:",
+                                          choices = c("Day of Week", "Month of Year"),
+                                          selected = "Day of Week"),
+                              plotOutput("summaryPlot", height = 500)
+                          )
+                 ),
                  tabPanel("To-Do List",
                           fluidPage(
                               h2("To Do List "),
@@ -86,6 +100,8 @@ ui <- navbarPage("Denver Traffic Accidents",
                               
                           )
                  )
+                 
+                 
 )
 
 # Define the server logic
@@ -93,22 +109,23 @@ server <- function(input, output, session) {
     
     # Create a reactive expression that filters the places data based on user input.
     # If "Display All Records" is checked, bypass the filters.
-    filteredPlaces <- reactive({
-        #if (isTRUE(input$displayAll)) {
-        #    return(places)
-        #}
-        
+    # Reactive expression for the full dataset (for the heatmap)
+    filteredPlacesAll <- reactive({
         data <- places
-        # Filter by category if any are selected
         if (!is.null(input$filterCategories) && length(input$filterCategories) > 0) {
             data <- data[data$category %in% input$filterCategories, ]
         }
-        # Filter by the selected single date
         if (!is.null(input$dateRange)) {
             data <- data[data$date >= input$dateRange[1] & data$date <= input$dateRange[2], ]
         }
-        if (nrow(data) > 50) {
-            data <- head(data, 50)
+        data
+    })
+    
+    # Reactive expression for a limited set of data (for markers)
+    filteredPlacesLimited <- reactive({
+        data <- filteredPlacesAll()
+        if(nrow(data) > 50) {
+            data <- head(data, 50)  # or use sample_n(data, 50) for a random selection
         }
         data
     })
@@ -117,48 +134,92 @@ server <- function(input, output, session) {
     output$map <- renderLeaflet({
         leaflet() %>%
             addTiles() %>%
-            addMarkers(data = filteredPlaces(),  # or yourData if you prefer
-                       lng = ~lng, 
-                       lat = ~lat, 
-                       popup = ~paste("<strong>", name, "</strong><br>",
-                                      "Category:", category, "<br>",
-                                      "Date:", date)) %>%
-            setView(lng = -105.0, lat = 39.75, zoom = 12)
-    })
-    
-    # Update the map markers whenever the filtered data changes
+            # Add the heatmap layer using the full filtered data
+            addHeatmap(
+                data = filteredPlacesAll(),
+                lng = ~lng,
+                lat = ~lat,
+                radius = 15,   # Adjust as needed
+                blur = 20,     # Adjust as needed
+                max = 0.05     # Adjust as needed
+            ) %>%
+            # Add a markers layer using only the limited dataset
+            addMarkers(
+                data = filteredPlacesLimited(),
+                lng = ~lng, 
+                lat = ~lat, 
+                popup = ~paste("<strong>", name, "</strong><br>",
+                               "Category:", category, "<br>",
+                               "Date:", date)
+            ) %>%
+            setView(lng = -105.0, lat = 39.75, zoom = 12.5)
+    })    
     observe({
-        leafletProxy("map", data = filteredPlaces()) %>%
+        leafletProxy("map", data = filteredPlacesLimited()) %>%
             clearMarkers() %>%
-            addMarkers(lng = ~lng, lat = ~lat, 
-                       popup = ~paste("<strong>", name, "</strong><br>",
-                                      "Category:", category, "<br>",
-                                      "Date:", date))
-        
+            addMarkers(
+                lng = ~lng,
+                lat = ~lat,
+                popup = ~paste("<strong>", name, "</strong><br>",
+                               "Category:", category, "<br>",
+                               "Date:", date)
+            )
     })
     
 
     # Render the time series plot aggregated by week and color coded by category
     output$timeSeriesPlot <- renderPlot({
         aggUnit <- if (input$aggPeriod == "Week") "week" else "month"
-        print(aggUnit)
-        # Group the data by week (floor_date rounds down to the start of the week) and category
+        
         df_summary <- places %>%
+            # Filter by the selected categories for the time series plot
+            filter(category %in% input$tsCategories) %>%
             group_by(period = floor_date(date, unit = aggUnit), category) %>%
             summarize(count = n(), .groups = "drop")
-        print("ASDF")
-        print(head(df_summary))
-        # Create the time series plot with ggplot2
+        
         ggplot(df_summary, aes(x = period, y = count, color = category)) +
             geom_line(size = 1) +
             geom_point() +
             geom_smooth(method = "lm", se = FALSE, linetype = "dashed") + 
-            labs(title = "Weekly Time Series Plot by Category",
-                 x = "Week",
+            labs(title = "Time Series Plot by Category",
+                 x = "Period",
                  y = "Count") +
             theme_minimal() +
             theme(legend.title = element_blank())
     })
+    output$summaryPlot <- renderPlot({
+        # Filter places by selected categories from the summary tab
+        filteredData <- places %>% 
+            filter(category %in% input$summaryCategories)
+        
+        if (input$aggType == "Day of Week") {
+            df_summary <- filteredData %>%
+                mutate(day = wday(date, label = TRUE, week_start = 1)) %>% 
+                group_by(day, category) %>%
+                summarize(count = n(), .groups = "drop")
+            
+            ggplot(df_summary, aes(x = day, y = count, fill = category)) +
+                geom_bar(stat = "identity", position = "dodge") +
+                labs(title = "Accidents by Day of Week and Category", 
+                     x = "Day of Week", y = "Count") +
+                theme_minimal()
+        } else {
+            df_summary <- filteredData %>%
+                mutate(month = month(date, label = TRUE)) %>% 
+                group_by(month, category) %>%
+                summarize(count = n(), .groups = "drop")
+            
+            ggplot(df_summary, aes(x = month, y = count, fill = category)) +
+                geom_bar(stat = "identity", position = "dodge") +
+                labs(title = "Accidents by Month of Year and Category", 
+                     x = "Month", y = "Count") +
+                theme_minimal()
+        }
+    })
+    
+    
+    
+    
 }
 
 # Run the application
